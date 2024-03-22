@@ -1,12 +1,14 @@
 import { createServer } from 'node:http'
-import { chdir } from 'node:process'
 import { getPlatformProxy } from "wrangler"
-
-chdir(new URL('.', import.meta.url).pathname)
-process.env.PWD = process.cwd()
 
 const proxy = await getPlatformProxy({})
 const bucket = proxy.env.BLOB
+
+process.on('SIGINT', async () => {
+  console.log('Cleaning up...')
+  await proxy.dispose()
+  process.exit(0)
+})
 
 const server = createServer(async (req, res) => {
   let message = ""
@@ -27,11 +29,10 @@ const server = createServer(async (req, res) => {
       res.setHeader('Content-Type', object.httpMetadata?.contentType)
     }
     res.setHeader('Content-Length', object.size)
-    // await sendStream(res, object.body)
-    res.end(await streamToBuff(res, object.body))
+    // await sendReadableStream(res, object.body)
+    res.end(await readableStreamToBuff2(object.body))
     return
   }
-
 
   // List images
   const { objects } = await bucket.list({
@@ -82,7 +83,7 @@ async function readRequest(req) {
   })
 }
 
-async function sendStream(res, stream) {
+async function sendReadableStream(res, stream) {
   await stream.pipeTo(
     new WritableStream({
       write(chunk) {
@@ -93,17 +94,20 @@ async function sendStream(res, stream) {
   res.end();
 }
 
-async function streamToBuff(res, stream) {
+async function readableStreamToBuff(stream) {
   console.log('reading stream to buffer...')
   const chunks = [];
   await stream.pipeTo(
     new WritableStream({
       write(chunk) {
-        console.log('new chunk...')
+        process.stdout.write(` +${chunk.length}`)
         chunks.push(chunk);
       },
+      close() {
+        console.log('stream close')
+      }
     }),
   )
-  console.log('stream read to buffer.')
+  console.log('stream read!')
   return Buffer.concat(chunks);
 }
