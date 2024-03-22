@@ -17,10 +17,15 @@ await bucket.put('cat2.jpg', buff.buffer)
 console.log('Fetching image from bucket...')
 
 console.log('Converting bucket image to buffer...')
+// This will make process hang
 const [cat1, cat2] = await Promise.all([
   bucket.get('cat1.jpg').then(obj => readableStreamToBuff(obj.body)),
   bucket.get('cat2.jpg').then(obj => readableStreamToBuff(obj.body)),
 ])
+
+// This works
+// const cat1 = await bucket.get('cat1.jpg').then(obj => readableStreamToBuff(obj.body))
+// const cat2 = await bucket.get('cat2.jpg').then(obj => readableStreamToBuff(obj.body))
 
 console.log('Buffer length (bucket):', [cat1.length, cat2.length])
 
