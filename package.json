@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node ./server.mjs"
+  },
+  "packageManager": "pnpm@8.15.5",
+  "dependencies": {
+    "wrangler": "^3.37.0"
+  }
+}
