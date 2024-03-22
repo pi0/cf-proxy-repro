@@ -3,6 +3,7 @@ import { getPlatformProxy } from "wrangler"
 
 const proxy = await getPlatformProxy({})
 const bucket = proxy.env.BLOB
+// const bucket = patchBucket(proxy.env.BLOB)
 
 process.on('SIGINT', async () => {
   console.log('Cleaning up...')
@@ -29,8 +30,8 @@ const server = createServer(async (req, res) => {
       res.setHeader('Content-Type', object.httpMetadata?.contentType)
     }
     res.setHeader('Content-Length', object.size)
-    // await sendReadableStream(res, object.body)
-    res.end(await readableStreamToBuff2(object.body))
+    await sendReadableStream(res, object.body)
+    // res.end(await readableStreamToBuff(object.body))
     return
   }
 
@@ -110,4 +111,53 @@ async function readableStreamToBuff(stream) {
   )
   console.log('stream read!')
   return Buffer.concat(chunks);
+}
+
+/**
+ * Workaround for https://github.com/cloudflare/workers-sdk/issues/5360
+*/
+function patchBucket(bucket) {
+  let _mutex
+
+  const _get = bucket.get.bind(bucket)
+
+  async function getAndRead(...args) {
+    const obj = await _get(...args)
+    const chunks = [];
+    for await (const chunk of obj.body) {
+      chunks.push(chunk);
+    }
+    const body = new ReadableStream({
+      start(controller) {
+        chunks.forEach(chunk => controller.enqueue(chunk))
+        controller.close()
+      },
+      close() {
+        chunks.length = 0
+      }
+    })
+    return { ...obj, body }
+  }
+
+  async function get(...args) {
+    if (_mutex) {
+      await _mutex
+    }
+    try {
+      _mutex = getAndRead(...args)
+      const obj = await _mutex
+      return obj
+    } finally {
+      _mutex = undefined
+    }
+  }
+
+  return new Proxy(bucket, {
+    get(target, prop) {
+      if (prop === 'get') {
+        return get
+      }
+      return Reflect.get(target, prop)
+    }
+  })
 }

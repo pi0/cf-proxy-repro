@@ -1,7 +1,7 @@
 import { getPlatformProxy } from "wrangler"
 
 const proxy = await getPlatformProxy({})
-const { BLOB: bucket } = proxy.env
+const bucket = proxy.env.BLOB
 
 console.log('Fetching cat image...')
 const imgReadableStream = await fetch('https://images.unsplash.com/photo-1579168765467-3b235f938439?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb&dl=yoo-hoo-E3LcqpQxtTU-unsplash.jpg').then(r => r.body)
@@ -14,9 +14,7 @@ console.log('Putting cats to the bucket...')
 await bucket.put('cat1.jpg', buff.buffer)
 await bucket.put('cat2.jpg', buff.buffer)
 
-console.log('Fetching image from bucket...')
-
-console.log('Converting bucket image to buffer...')
+console.log('Reading from bucket...')
 // This will make process hang
 const [cat1, cat2] = await Promise.all([
   bucket.get('cat1.jpg').then(obj => readableStreamToBuff(obj.body)),
@@ -27,7 +25,7 @@ const [cat1, cat2] = await Promise.all([
 // const cat1 = await bucket.get('cat1.jpg').then(obj => readableStreamToBuff(obj.body))
 // const cat2 = await bucket.get('cat2.jpg').then(obj => readableStreamToBuff(obj.body))
 
-console.log('Buffer length (bucket):', [cat1.length, cat2.length])
+console.log('Buffer length (bucket):', [cat1?.length, cat2?.length])
 
 await proxy.dispose()
 
