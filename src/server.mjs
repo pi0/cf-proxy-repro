@@ -3,13 +3,6 @@ import { getPlatformProxy } from "wrangler"
 
 const proxy = await getPlatformProxy({})
 const bucket = proxy.env.BLOB
-// const bucket = patchBucket(proxy.env.BLOB)
-
-process.on('SIGINT', async () => {
-  console.log('Cleaning up...')
-  await proxy.dispose()
-  process.exit(0)
-})
 
 const server = createServer(async (req, res) => {
   let message = ""
@@ -93,71 +86,4 @@ async function sendReadableStream(res, stream) {
     }),
   )
   res.end();
-}
-
-async function readableStreamToBuff(stream) {
-  console.log('reading stream to buffer...')
-  const chunks = [];
-  await stream.pipeTo(
-    new WritableStream({
-      write(chunk) {
-        process.stdout.write(` +${chunk.length}`)
-        chunks.push(chunk);
-      },
-      close() {
-        console.log('stream close')
-      }
-    }),
-  )
-  console.log('stream read!')
-  return Buffer.concat(chunks);
-}
-
-/**
- * Workaround for https://github.com/cloudflare/workers-sdk/issues/5360
-*/
-function patchBucket(bucket) {
-  let _mutex
-
-  const _get = bucket.get.bind(bucket)
-
-  async function getAndRead(...args) {
-    const obj = await _get(...args)
-    const chunks = [];
-    for await (const chunk of obj.body) {
-      chunks.push(chunk);
-    }
-    const body = new ReadableStream({
-      start(controller) {
-        chunks.forEach(chunk => controller.enqueue(chunk))
-        controller.close()
-      },
-      close() {
-        chunks.length = 0
-      }
-    })
-    return { ...obj, body }
-  }
-
-  async function get(...args) {
-    if (_mutex) {
-      await _mutex
-    }
-    try {
-      _mutex = getAndRead(...args)
-      const obj = await _mutex
-      return obj
-    } finally {
-      _mutex = undefined
-    }
-  }
-
-  return new Proxy(bucket, {
-    get(target, prop) {
-      if (prop === 'get') {
-        return get
-      }
-      return Reflect.get(target, prop)
-    }
-  })
 }
